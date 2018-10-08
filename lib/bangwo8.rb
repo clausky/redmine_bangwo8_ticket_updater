@@ -14,8 +14,9 @@ class Bangwo8Listener < Redmine::Hook::Listener
 
         ticketId = get_field("工单ID").to_i
         return unless ticketId > 0
-        RAILS_DEFAULT_LOGGER.info "Bangwo8Listener update ticket(#{ticketId}):" + get_fields.to_json
-        RestClient.put "http://#{@@account}:#{@@password}@www.bangwo8.com/api/v1/tickets/#{ticketId}.json",get_fields.to_json,{content_type: "application/json"}
+        data = get_fields
+        RAILS_DEFAULT_LOGGER.info "Bangwo8Listener update ticket(#{ticketId}):" + data.to_json
+        RestClient.put "http://#{@@account}:#{@@password}@www.bangwo8.com/api/v1/tickets/#{ticketId}.json",data.to_json,{content_type: "application/json"}
     end
 
     def load_config()
@@ -49,6 +50,8 @@ class Bangwo8Listener < Redmine::Hook::Listener
             }
 
         }
+        template_id = get_ticket_template_id(get_field("工单ID").to_i)
+        fields[:ticket][:ticketTemplateId] = template_id if template_id>0
         return fields
     end
 
@@ -79,5 +82,12 @@ class Bangwo8Listener < Redmine::Hook::Listener
             note = j[:notes]
         end
         return note
+    end
+
+    def get_ticket_template_id(ticketId)
+        ticket_raw = JSON.parse RestClient.get "http://#{@@account}:#{@@password}@www.bangwo8.com/api/v1/tickets/#{ticketId}.json"
+        return 0 if ticket_raw['ticket'].nil?
+        ticket = ticket_raw['ticket'].first
+        return ticket["ticketTemplateId"].to_i
     end
 end

@@ -50,11 +50,14 @@ class Bangwo8TicketController < ApplicationController
             ],
         }}
         
-        ret = RestClient.post "http://127.0.0.1:3000/issues.json",issue_data.to_json,{content_type: "application/json",Authorization: request.headers[:Authorization].to_s} {|response, request, result| response }
+        response = RestClient.post "http://127.0.0.1:3000/issues.json",issue_data.to_json,{content_type: "application/json",Authorization: request.headers[:Authorization].to_s} {|response, request, result| response }
 
-        respond_to do |format|
-            #format.api
-            format.json { render :json => ret }
+        response_json = JSON.parse response
+
+        if response.code == 200 or response.code == 201
+            render :text => ("创建成功,任务号#" + response_json["issue"]["id"].to_s)
+        else
+            render :status => response.code, :text=> "创建失败" + response.body
         end
     end
 

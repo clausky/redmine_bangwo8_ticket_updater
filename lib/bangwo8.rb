@@ -14,9 +14,11 @@ class Bangwo8Listener < Redmine::Hook::Listener
 
         ticketId = get_field("工单ID").to_i
         return unless ticketId > 0
-        data = get_fields
-        RAILS_DEFAULT_LOGGER.info "Bangwo8Listener update ticket(#{ticketId}):" + data.to_json
-        RestClient.put "http://#{@@account}:#{@@password}@www.bangwo8.com/api/v1/tickets/#{ticketId}.json",data.to_json,{content_type: "application/json"}
+        Thread.new do
+            data = get_fields
+            RAILS_DEFAULT_LOGGER.info "Bangwo8Listener update ticket(#{ticketId}):" + data.to_json()
+            RAILS_DEFAULT_LOGGER.info RestClient.put "http://#{@@account}:#{@@password}@www.bangwo8.com/api/v1/tickets/#{ticketId}.json",data.to_json(),{content_type: "application/json"}
+        end
     end
 
     def load_config()
@@ -34,24 +36,24 @@ class Bangwo8Listener < Redmine::Hook::Listener
         priorityLevel = get_field("priority_id").to_i
         priorityLevel = 4 if priorityLevel == 5
 
-        fields = {
-            :ticket => {
-                :subject => get_field("subject"),                     #标题
-                :descript => get_field("description"),                #描述 
-                :ticketStatus => statusMap[@@issue.status.name],      #状态
-                :priorityLevel => priorityLevel,                      #优先级
-                :ticketReply => {:replyMsg=>get_notes()},
-                :custom_fields => [
-                    {:key => "expect_time", :value => get_field("需求方期望完成时间")},
-                    {:key => "plan_time",   :value => get_field("due_date")},
-                    {:key => "pm",          :value => get_field("负责产品经理")},
-                    {:key => "xqzt",        :value => @@issue.status.name}
-                ]
-            }
+        ticket = get_ticket(get_field("工单ID").to_i)
+        ticket.delete("ticketId")
+        #ticket.delete("ticketSource")
+        ticket["subject"] = get_field("subject");
+        ticket["descript"] = get_field("description");
+        ticket["ticketStatus"] = statusMap[@@issue.status.name];
+        ticket["priorityLevel"] = priorityLevel;
+        ticket["ticketReply"] = {:replyMsg=>get_notes()};
 
+        ticket["custom_fields"] = ticket["custom_fields"].map { |f|
+            f["value"] = get_field("需求方期望完成时间") if f["key"] == "expect_time";
+            f["value"] = get_field("due_date") if f["key"] == "plan_time";
+            f["value"] = get_field("负责产品经理") if f["key"] == "pm";
+            f["value"] = @@issue.status.name if f["key"] == "xqzt";
+            f
         }
-        template_id = get_ticket_template_id(get_field("工单ID").to_i)
-        fields[:ticket][:ticketTemplateId] = template_id if template_id>0
+        RAILS_DEFAULT_LOGGER.info "Bangwo8Listener update ticket:" + ticket.to_json
+        fields = { "ticket" => ticket }
         return fields
     end
 
@@ -84,10 +86,10 @@ class Bangwo8Listener < Redmine::Hook::Listener
         return note
     end
 
-    def get_ticket_template_id(ticketId)
+    def get_ticket(ticketId)
         ticket_raw = JSON.parse RestClient.get "http://#{@@account}:#{@@password}@www.bangwo8.com/api/v1/tickets/#{ticketId}.json"
         return 0 if ticket_raw['ticket'].nil?
         ticket = ticket_raw['ticket'].first
-        return ticket["ticketTemplateId"].to_i
+        return ticket
     end
 end
